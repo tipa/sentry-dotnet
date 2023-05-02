@@ -1,3 +1,9 @@
+using System.Diagnostics.Tracing;
+using Microsoft.Diagnostics.NETCore.Client;
+using Microsoft.Diagnostics.Tracing;
+using Microsoft.Diagnostics.Tracing.EventPipe;
+using Microsoft.Diagnostics.Tracing.Parsers;
+using Microsoft.Diagnostics.Tracing.Parsers.Clr;
 using Sentry.Internal.Http;
 
 namespace Sentry.Profiling.Tests;
@@ -194,4 +200,296 @@ public class SamplingTransactionProfilerTests
             }
         }
     }
+
+    [Fact]
+    public void ContinousProfiling()
+    {
+        EventPipeProvider[] providers = new[]
+        {
+            // Note: all events we need issued by "DotNETRuntime" provider are at "EventLevel.Informational"
+            // see https://learn.microsoft.com/en-us/dotnet/fundamentals/diagnostics/r  untime-events
+            new EventPipeProvider(ClrTraceEventParser.ProviderName, EventLevel.Informational, (long)ClrTraceEventParser.Keywords.Default),
+            new EventPipeProvider(SampleProfilerTraceEventParser.ProviderName, EventLevel.Informational),
+            // new EventPipeProvider("System.Threading.Tasks.TplEventSource", EventLevel.Informational, (long)TplEtwProviderTraceEventParser.Keywords.Default)
+        };
+        var client = new DiagnosticsClient(Process.GetCurrentProcess().Id);
+        using (var session = client.StartEventPipeSession(providers, true))
+        {
+
+            Task streamTask = Task.Run(() =>
+            {
+                var source = new EventPipeEventSource(session.EventStream);
+                var sampleEventParser = new SampleProfilerTraceEventParser(source);
+                sampleEventParser.ThreadSample += (ClrThreadSampleTraceData obj) =>
+                {
+                    // Console.WriteLine($"{obj.TimeStampRelativeMSec} {obj.EventName} - thread {obj.ThreadID}");
+                    // TODO see ProcessExtendedData()
+                };
+
+                source.Clr.ClrStackWalk += (ClrStackWalkTraceData data) =>
+                {
+                    Console.WriteLine($"ClrStackWalk {data.TimeStampRelativeMSec} {data.EventName}");
+                };
+
+                source.Clr.LoaderModuleLoad += delegate (ModuleLoadUnloadTraceData data)
+                {
+                    Console.WriteLine($"LoaderModuleLoad {data.TimeStampRelativeMSec} {data.EventName}");
+                    // processes.GetOrCreateProcess(data.ProcessID, data.TimeStampQPC).LoadedModules.ManagedModuleLoadOrUnload(data, true, false);
+                };
+                source.Clr.LoaderModuleUnload += delegate (ModuleLoadUnloadTraceData data)
+                {
+                    Console.WriteLine($"LoaderModuleUnload {data.TimeStampRelativeMSec} {data.EventName}");
+                    // processes.GetOrCreateProcess(data.ProcessID, data.TimeStampQPC).LoadedModules.ManagedModuleLoadOrUnload(data, false, false);
+                };
+                source.Clr.LoaderModuleDCStopV2 += delegate (ModuleLoadUnloadTraceData data)
+                {
+                    Console.WriteLine($"LoaderModuleDCStopV2 {data.TimeStampRelativeMSec} {data.EventName}");
+                    // processes.GetOrCreateProcess(data.ProcessID, data.TimeStampQPC).LoadedModules.ManagedModuleLoadOrUnload(data, false, true);
+                };
+
+                var ClrRundownParser = new ClrRundownTraceEventParser(source);
+                Action<ModuleLoadUnloadTraceData> onLoaderRundown = delegate (ModuleLoadUnloadTraceData data)
+                {
+                    Console.WriteLine($"onLoaderRundown {data.TimeStampRelativeMSec} {data.EventName}");
+                    // processes.GetOrCreateProcess(data.ProcessID, data.TimeStampQPC).LoadedModules.ManagedModuleLoadOrUnload(data, false, true);
+                };
+
+                ClrRundownParser.LoaderModuleDCStop += onLoaderRundown;
+                ClrRundownParser.LoaderModuleDCStart += onLoaderRundown;
+
+                Action<MethodLoadUnloadVerboseTraceData> onMethodStart = delegate (MethodLoadUnloadVerboseTraceData data)
+                    {
+                        Console.WriteLine($"onMethodStart {data.TimeStampRelativeMSec} {data.EventName}");
+                        // // We only capture data on unload, because we collect the addresses first.
+                        // if (!data.IsDynamic && !data.IsJitted)
+                        // {
+                        //     bookKeepingEvent = true;
+                        // }
+
+                        // if ((int)data.ID == 139)       // MethodDCStartVerboseV2
+                        // {
+                        //     bookKeepingEvent = true;
+                        // }
+
+                        // if (data.IsJitted)
+                        // {
+                        //     TraceProcess process = processes.GetOrCreateProcess(data.ProcessID, data.TimeStampQPC);
+                        //     process.InsertJITTEDMethod(data.MethodStartAddress, data.MethodSize, delegate ()
+                        //     {
+                        //         TraceManagedModule module = process.LoadedModules.GetOrCreateManagedModule(data.ModuleID, data.TimeStampQPC);
+                        //         MethodIndex methodIndex = CodeAddresses.Methods.NewMethod(TraceLog.GetFullName(data), module.ModuleFile.ModuleFileIndex, data.MethodToken);
+                        //         return new TraceProcess.MethodLookupInfo(data.MethodStartAddress, data.MethodSize, methodIndex);
+                        //     });
+
+                        //     jittedMethods.Add((MethodLoadUnloadVerboseTraceData)data.Clone());
+                        // }
+                    };
+                source.Clr.MethodLoadVerbose += onMethodStart;
+                source.Clr.MethodDCStartVerboseV2 += onMethodStart;
+                ClrRundownParser.MethodDCStartVerbose += onMethodStart;
+
+                source.Clr.MethodUnloadVerbose += delegate (MethodLoadUnloadVerboseTraceData data)
+                {
+                    Console.WriteLine($"MethodUnloadVerbose {data.TimeStampRelativeMSec} {data.EventName}");
+                    // codeAddresses.AddMethod(data);
+                    // if (!data.IsJitted)
+                    // {
+                    //     bookKeepingEvent = true;
+                    // }
+                };
+                source.Clr.MethodILToNativeMap += delegate (MethodILToNativeMapTraceData data)
+                {
+                    Console.WriteLine($"MethodILToNativeMap {data.TimeStampRelativeMSec} {data.EventName}");
+                    // codeAddresses.AddILMapping(data);
+                    // bookKeepingEvent = true;
+                };
+
+                ClrRundownParser.MethodILToNativeMapDCStop += delegate (MethodILToNativeMapTraceData data)
+                {
+                    Console.WriteLine($"MethodILToNativeMapDCStop {data.TimeStampRelativeMSec} {data.EventName}");
+                    // codeAddresses.AddILMapping(data);
+                    // bookKeepingEvent = true;
+                };
+
+                try
+                {
+                    source.Process();
+                }
+                // NOTE: This exception does not currently exist. It is something that needs to be added to TraceEvent.
+                catch (Exception e)
+                {
+                    Console.WriteLine("Error encountered while processing events");
+                    Console.WriteLine(e.ToString());
+                }
+            });
+
+            RunForMs(100);
+            session.Stop();
+            streamTask.Wait();
+        }
+    }
+
+    // /// <summary>
+    // /// Process any extended data (like Win7 style stack traces) associated with 'data'
+    // /// returns true if the event should be considered a bookkeeping event.
+    // /// </summary>
+    // internal bool ProcessExtendedData(TraceEvent data, ushort extendedDataCount)
+    // {
+    //     var isBookkeepingEvent = false;
+    //     var extendedData = data.eventRecord->ExtendedData;
+    //     Debug.Assert(extendedData != null && extendedDataCount != 0);
+    //     Guid* relatedActivityIDPtr = null;
+    //     string containerID = null;
+    //     for (int i = 0; i < extendedDataCount; i++)
+    //     {
+    //         if (extendedData[i].ExtType == TraceEventNativeMethods.EVENT_HEADER_EXT_TYPE_STACK_TRACE64 ||
+    //             extendedData[i].ExtType == TraceEventNativeMethods.EVENT_HEADER_EXT_TYPE_STACK_TRACE32)
+    //         {
+    //             int pointerSize = (extendedData[i].ExtType == TraceEventNativeMethods.EVENT_HEADER_EXT_TYPE_STACK_TRACE64) ? 8 : 4;
+    //             var stackRecord = (TraceEventNativeMethods.EVENT_EXTENDED_ITEM_STACK_TRACE64*)extendedData[i].DataPtr;
+    //             // TODO Debug.Assert(stackRecord->MatchId == 0);
+    //             ulong* addresses = &stackRecord->Address[0];
+    //             int addressesCount = (extendedData[i].DataSize - sizeof(ulong)) / pointerSize;
+
+    //             TraceProcess process = processes.GetOrCreateProcess(data.ProcessID, data.TimeStampQPC);
+    //             TraceThread thread = Threads.GetOrCreateThread(data.ThreadIDforStacks(), data.TimeStampQPC, process);
+    //             EventIndex eventIndex = (EventIndex)eventCount;
+
+    //             ulong sampleAddress;
+    //             byte* lastAddressPtr = (((byte*)addresses) + (extendedData[i].DataSize - sizeof(ulong) - pointerSize));
+    //             if (pointerSize == 4)
+    //             {
+    //                 sampleAddress = *((uint*)lastAddressPtr);
+    //             }
+    //             else
+    //             {
+    //                 sampleAddress = *((ulong*)lastAddressPtr);
+    //             }
+
+    //             // Note that I use the pointer size for the log, not the event, since the kernel events
+    //             // might differ in pointer size from the user mode event.
+    //             if (PointerSize == 4)
+    //             {
+    //                 sampleAddress &= 0xFFFFFFFF00000000;
+    //             }
+
+    //             if (process.IsKernelAddress(sampleAddress, PointerSize) && data.ProcessID != 0 && data.ProcessID != 4)
+    //             {
+    //                 // If this is a kernel event, we have to defer making the stack (it is incomplete).
+    //                 // Make a new IncompleteStack to track that (unlike other stack events we don't need to go looking for it.
+    //                 IncompleteStack stackInfo = AllocateIncompleteStack(eventIndex, thread, EventIndex.Invalid);    // Blocking stack can be invalid because CSWitches don't use this path.
+    //                 Debug.Assert(!(data is CSwitchTraceData));        // CSwtiches don't use this form of call stacks.  When they do set setackInfo.IsCSwitch.
+
+    //                 // Remember the kernel frames
+    //                 if (!stackInfo.LogKernelStackFragment(addresses, addressesCount, pointerSize, data.TimeStampQPC, this))
+    //                 {
+    //                     stackInfo.AddEntryToThread(ref thread.lastEntryIntoKernel);     // If not done remember to complete it
+    //                 }
+
+    //                 if (countForEvent != null)
+    //                 {
+    //                     countForEvent.m_stackCount++;   // Update stack counts
+    //                 }
+    //             }
+    //             else
+    //             {
+    //                 CallStackIndex callStackIndex = callStacks.GetStackIndexForStackEvent(
+    //                     addresses, addressesCount, pointerSize, thread);
+    //                 Debug.Assert(callStacks.Depth(callStackIndex) == addressesCount);
+
+    //                 // Is this the special ETW_TASK_STACK_TRACE/ETW_OPCODE_USER_MODE_STACK_TRACE which is just
+    //                 // there to attach to a kernel event if so attach it to all IncompleteStacks on this thread.
+    //                 if (data.ID == (TraceEventID)18 && data.Opcode == (TraceEventOpcode)24 &&
+    //                     data.ProviderGuid == KernelTraceEventParser.EventTracingProviderGuid)
+    //                 {
+    //                     isBookkeepingEvent = true;
+    //                     EmitStackOnExitFromKernel(ref thread.lastEntryIntoKernel, callStackIndex, null);
+    //                     thread.lastEmitStackOnExitFromKernelQPC = data.TimeStampQPC;
+    //                 }
+    //                 else
+    //                 {
+    //                     // If this is not the special user mode stack event that fires on exit from the kernel
+    //                     // we don't need any IncompleteStack structures, we can just attach the stack to the
+    //                     // current event and be done.
+
+    //                     // Note that we don't interfere with the splicing of kernel and user mode stacks because we do
+    //                     // see user mode stacks delayed and have a new style user mode stack spliced in.
+    //                     AddStackToEvent(eventIndex, callStackIndex);
+    //                     if (countForEvent != null)
+    //                     {
+    //                         countForEvent.m_stackCount++;   // Update stack counts
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //         else if (extendedData[i].ExtType == TraceEventNativeMethods.EVENT_HEADER_EXT_TYPE_RELATED_ACTIVITYID)
+    //         {
+    //             relatedActivityIDPtr = (Guid*)(extendedData[i].DataPtr);
+    //         }
+    //         else if (extendedData[i].ExtType == TraceEventNativeMethods.EVENT_HEADER_EXT_TYPE_CONTAINER_ID)
+    //         {
+    //             containerID = Marshal.PtrToStringAnsi((IntPtr)extendedData[i].DataPtr, (int)extendedData[i].DataSize);
+    //         }
+    //     }
+
+    //     if (relatedActivityIDPtr != null)
+    //     {
+    //         if (relatedActivityIDs.Count == 0)
+    //         {
+    //             // Insert a synthetic value since 0 represents "no related activity ID".
+    //             relatedActivityIDs.Add(Guid.Empty);
+    //         }
+
+    //         // TODO This is a bit of a hack.   We wack this field in place.
+    //         // We encode this as index into the relatedActivityID GrowableArray.
+    //         if (IntPtr.Size == 8)
+    //         {
+    //             data.eventRecord->ExtendedData = (TraceEventNativeMethods.EVENT_HEADER_EXTENDED_DATA_ITEM*)(relatedActivityIDs.Count << 4);
+    //         }
+    //         else
+    //         {
+    //             data.eventRecord->ExtendedData = (TraceEventNativeMethods.EVENT_HEADER_EXTENDED_DATA_ITEM*)relatedActivityIDs.Count;
+    //         }
+    //         relatedActivityIDs.Add(*relatedActivityIDPtr);
+    //     }
+    //     else
+    //     {
+    //         data.eventRecord->ExtendedData = null;
+    //     }
+
+    //     if (containerID != null)
+    //     {
+    //         // TODO This is a bit of a hack.   We wack this field in place.
+    //         // We encode this as index into the containerIDs GrowableArray.
+    //         if (containerIDs.Count == 0)
+    //         {
+    //             // Insert a synthetic value since 0 represents "no container ID".
+    //             containerIDs.Add(null);
+    //         }
+
+    //         // Look for the container ID.
+    //         bool found = false;
+    //         for (int i = 0; i < containerIDs.Count; i++)
+    //         {
+    //             if (containerIDs[i] == containerID)
+    //             {
+    //                 data.eventRecord->ExtendedDataCount = (ushort)i;
+    //                 found = true;
+    //                 break;
+    //             }
+    //         }
+
+    //         if (!found)
+    //         {
+    //             data.eventRecord->ExtendedDataCount = (ushort)containerIDs.Count;
+    //             containerIDs.Add(containerID);
+    //         }
+    //     }
+    //     else
+    //     {
+    //         data.eventRecord->ExtendedDataCount = 0;
+    //     }
+
+    //     return isBookkeepingEvent;
+    // }
 }

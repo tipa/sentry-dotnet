@@ -231,6 +231,12 @@ internal class TraceLogProcessor
         // _eventSource.Clr.GCAllocationTick += OnSampledProfile;
         // _eventSource.Clr.GCSampledObjectAllocation += OnSampledProfile;
 
+        // TODO - we can get managed thread IDs for some threads, but still not sure how to get their names...
+        // _eventSource.Clr.AppDomainResourceManagementThreadCreated += (ThreadCreatedTraceData obj) =>
+        // {
+        //     Console.WriteLine($"{obj.TimeStampRelativeMSec} {obj.EventName} - thread {obj.ThreadID} {obj.ManagedThreadID} {obj.OSThreadID}");
+        // };
+
         var sampleEventParser = new SampleProfilerTraceEventParser(_eventSource);
         sampleEventParser.ThreadSample += OnSampledProfile;
     }

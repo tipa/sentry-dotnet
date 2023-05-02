@@ -92,31 +92,19 @@ internal class SamplingTransactionProfiler : ITransactionProfiler
         _options.LogDebug("Starting profile processing.");
 
         _transaction = transaction;
-        using var traceLog = await CreateTraceLogAsync().ConfigureAwait(false);
+        using var eventSource = await CreateEventPipeEventSourceAsync().ConfigureAwait(false);
 
-        try
+        _options.LogDebug("Converting profile to Sentry format.");
+
+        _cancellationToken.ThrowIfCancellationRequested();
+        var processor = new EventPipeProcessor(_options, eventSource)
         {
-            _options.LogDebug("Converting profile to Sentry format.");
+            MaxTimestampMs = _duration.Value.TotalMilliseconds
+        };
 
-            _cancellationToken.ThrowIfCancellationRequested();
-            var processor = new TraceLogProcessor(_options, traceLog)
-            {
-                MaxTimestampMs = _duration.Value.TotalMilliseconds
-            };
-
-            var profile = processor.Process(_cancellationToken);
-            _options.LogDebug("Profiling finished successfully.");
-            return CreateProfileInfo(transaction, profile);
-        }
-        finally
-        {
-            traceLog.Dispose();
-            if (File.Exists(traceLog.FilePath))
-            {
-                _options.LogDebug("Removing temporarily file '{0}'.", traceLog.FilePath);
-                File.Delete(traceLog.FilePath);
-            }
-        }
+        var profile = processor.Process(_cancellationToken);
+        _options.LogDebug("Profiling finished successfully.");
+        return CreateProfileInfo(transaction, profile);
     }
 
     internal static ProfileInfo CreateProfileInfo(Transaction transaction, SampleProfile profile)
@@ -135,14 +123,13 @@ internal class SamplingTransactionProfiler : ITransactionProfiler
         };
     }
 
-    // We need the TraceLog for all the stack processing it does.
-    private async Task<TraceLog> CreateTraceLogAsync()
+    private async Task<EventPipeEventSource> CreateEventPipeEventSourceAsync()
     {
         _cancellationToken.ThrowIfCancellationRequested();
         Debug.Assert(_data is not null);
         using var nettraceStream = await _data.ConfigureAwait(false);
-        using var eventSource = CreateEventPipeEventSource(nettraceStream);
-        return ConvertToETLX(eventSource);
+        return CreateEventPipeEventSource(nettraceStream);
+        // return ConvertToETLX(eventSource);
     }
 
     // EventPipeEventSource(Stream stream) sets isStreaming = true even though the stream is pre-collected. This
