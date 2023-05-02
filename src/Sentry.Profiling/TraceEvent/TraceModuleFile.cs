@@ -1,6 +1,8 @@
 using Microsoft.Diagnostics.Tracing.Etlx;
 using Address = System.UInt64;
 
+namespace Sentry.Profiling.DiagnosticsTracing;
+
 /// <summary>
 /// The TraceModuleFile represents a executable file that can be loaded into memory (either an EXE or a
 /// DLL).  It represents the path on disk as well as the location in memory where it loads (or

@@ -16,7 +16,7 @@ internal class EventPipeProcessor
     private readonly SentryOptions _options;
     private readonly EventPipeEventSource _eventSource;
 
-    /// Output profile being built.
+    // Output profile being built.
     private readonly SampleProfile _profile = new();
 
     // A sparse array that maps from StackSourceFrameIndex to an index in the output Profile.frames.

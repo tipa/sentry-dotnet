@@ -3,6 +3,7 @@ using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Etlx;
 using Sentry.Extensibility;
 using Sentry.Internal;
+using Sentry.Profiling.DiagnosticsTracing;
 using Sentry.Protocol;
 
 namespace Sentry.Profiling;
@@ -127,7 +128,7 @@ internal class SamplingTransactionProfiler : ITransactionProfiler
     {
         _cancellationToken.ThrowIfCancellationRequested();
         Debug.Assert(_data is not null);
-        using var nettraceStream = await _data.ConfigureAwait(false);
+        var nettraceStream = await _data.ConfigureAwait(false);
         return CreateEventPipeEventSource(nettraceStream);
         // return ConvertToETLX(eventSource);
     }
@@ -159,32 +160,32 @@ internal class SamplingTransactionProfiler : ITransactionProfiler
         return eventSource;
     }
 
-    private TraceLog ConvertToETLX(EventPipeEventSource source)
-    {
-        Debug.Assert(_transaction is not null);
-        var etlxPath = Path.Combine(_tempDirectoryPath, $"{_transaction.EventId}.etlx");
-        _options.LogDebug("Writing profile temporarily to '{0}'.", etlxPath);
-        if (File.Exists(etlxPath))
-        {
-            _options.LogDebug("Temporary file '{0}' already exists, deleting first.", etlxPath);
-            File.Delete(etlxPath);
-        }
+    // private TraceLog ConvertToETLX(EventPipeEventSource source)
+    // {
+    //     Debug.Assert(_transaction is not null);
+    //     var etlxPath = Path.Combine(_tempDirectoryPath, $"{_transaction.EventId}.etlx");
+    //     _options.LogDebug("Writing profile temporarily to '{0}'.", etlxPath);
+    //     if (File.Exists(etlxPath))
+    //     {
+    //         _options.LogDebug("Temporary file '{0}' already exists, deleting first.", etlxPath);
+    //         File.Delete(etlxPath);
+    //     }
 
-        _cancellationToken.ThrowIfCancellationRequested();
-        typeof(TraceLog)
-            .GetMethod(
-                "CreateFromEventPipeEventSources",
-                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
-                new Type[] { typeof(TraceEventDispatcher), typeof(string), typeof(TraceLogOptions) })?
-            .Invoke(null, new object[] { source, etlxPath, new TraceLogOptions() { ContinueOnError = true } });
+    //     _cancellationToken.ThrowIfCancellationRequested();
+    //     typeof(TraceLog)
+    //         .GetMethod(
+    //             "CreateFromEventPipeEventSources",
+    //             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static,
+    //             new Type[] { typeof(TraceEventDispatcher), typeof(string), typeof(TraceLogOptions) })?
+    //         .Invoke(null, new object[] { source, etlxPath, new TraceLogOptions() { ContinueOnError = true } });
 
-        if (!File.Exists(etlxPath))
-        {
-            throw new FileNotFoundException($"Profiler failed at CreateFromEventPipeEventSources() - temporary file doesn't exist", etlxPath);
-        }
+    //     if (!File.Exists(etlxPath))
+    //     {
+    //         throw new FileNotFoundException($"Profiler failed at CreateFromEventPipeEventSources() - temporary file doesn't exist", etlxPath);
+    //     }
 
-        return new TraceLog(etlxPath);
-    }
+    //     return new TraceLog(etlxPath);
+    // }
 
     private readonly BindingFlags _commonBindingFlags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 }

@@ -1,3 +1,5 @@
+using Microsoft.Diagnostics.Tracing.Etlx;
+
 namespace Sentry.Profiling.DiagnosticsTracing;
 
 /// <summary>
@@ -24,7 +26,7 @@ internal sealed class TraceThreads : IEnumerable<TraceThread>
     /// Each thread that occurs in the log is given a unique index (which unlike the PID is unique), that
     /// ranges from 0 to Count - 1.   Return the TraceThread for the given index.
     /// </summary>
-    public TraceThread this[ThreadIndex threadIndex]
+    public TraceThread? this[ThreadIndex threadIndex]
     {
         get
         {
@@ -36,40 +38,26 @@ internal sealed class TraceThreads : IEnumerable<TraceThread>
             return threads[(int)threadIndex];
         }
     }
+
     /// <summary>
     /// Given an OS thread ID and a time, return the last TraceThread that has the same thread ID,
     /// and whose start time is less than 'timeRelativeMSec'. If 'timeRelativeMSec' is during the thread's lifetime this
     /// is guaranteed to be the correct thread.
     /// </summary>
-    public TraceThread GetThread(int threadID, double timeRelativeMSec)
+    public TraceThread? GetThread(int threadID, double timeRelativeMSec)
     {
         long timeQPC = log.RelativeMSecToQPC(timeRelativeMSec);
         InitThread();
-        TraceThread ret = null;
-        threadIDtoThread.TryGetValue(threadID, timeQPC, out ret);
+        TraceThread? ret = null;
+        threadIDtoThread!.TryGetValue(threadID, timeQPC, out ret);
         return ret;
     }
-    /// <summary>
-    /// An XML representation of the TraceThreads (for debugging)
-    /// </summary>
-    public override string ToString()
-    {
-        StringBuilder sb = new StringBuilder();
-        sb.Append("<TraceThreads Count=").Append(XmlUtilities.XmlQuote(Count)).AppendLine(">");
-        foreach (TraceThread thread in this)
-        {
-            sb.Append("  ").Append(thread.ToString()).AppendLine();
-        }
-
-        sb.AppendLine("</TraceThreads>");
-        return sb.ToString();
-    }
     #region Private
-    internal TraceThread GetThread(int threadID, long timeQPC)
+    internal TraceThread? GetThread(int threadID, long timeQPC)
     {
         InitThread();
-        TraceThread ret = null;
-        threadIDtoThread.TryGetValue(threadID, timeQPC, out ret);
+        TraceThread? ret = null;
+        threadIDtoThread!.TryGetValue(threadID, timeQPC, out ret);
         return ret;
     }
 
@@ -104,7 +92,7 @@ internal sealed class TraceThreads : IEnumerable<TraceThread>
     /// </summary>
     internal TraceThread GetOrCreateThread(int threadID, long timeQPC, TraceProcess process, bool isThreadCreateEvent = false)
     {
-        TraceThread retThread = GetThread(threadID, timeQPC);
+        TraceThread? retThread = GetThread(threadID, timeQPC);
 
         // ThreadIDs are machine wide, however, they are also reused. Thus GetThread CAN give you an OLD thread IF
         // we are missing thread Death and creation events (thus silently it gets reused on another process). This
@@ -114,7 +102,7 @@ internal sealed class TraceThreads : IEnumerable<TraceThread>
         // the current event. If not, we assume that there were silent thread deaths and creations and simply create
         // a new TraceThread. Note that this problem mostly goes away when we have just a single circular buffer since
         // we won't lose the Thread death and creation events.
-        if (process != null && process.ProcessID != -1 && retThread != null && retThread.process.ProcessID != -1 && process.ProcessID != retThread.process.ProcessID)
+        if (process.ProcessID != -1 && retThread != null && retThread.process.ProcessID != -1 && process.ProcessID != retThread.process.ProcessID)
         {
             retThread = null;
         }
@@ -123,11 +111,6 @@ internal sealed class TraceThreads : IEnumerable<TraceThread>
         {
             InitThread();
 
-            if (process == null)
-            {
-                process = log.Processes.GetOrCreateProcess(-1, timeQPC);      // Unknown process
-            }
-
             retThread = new TraceThread(threadID, process, (ThreadIndex)threads.Count);
             if (isThreadCreateEvent)
             {
@@ -135,7 +118,7 @@ internal sealed class TraceThreads : IEnumerable<TraceThread>
             }
 
             threads.Add(retThread);
-            threadIDtoThread.Add(threadID, timeQPC, retThread);
+            threadIDtoThread!.Add(threadID, timeQPC, retThread);
         }
 
         // Set the process if we had to set this threads process ID to the 'unknown' process.
@@ -147,38 +130,10 @@ internal sealed class TraceThreads : IEnumerable<TraceThread>
         return retThread;
     }
 
-    void IFastSerializable.ToStream(Serializer serializer)
-    {
-        serializer.Write(log);
-
-        serializer.Log("<WriteCollection name=\"threads\" count=\"" + threads.Count + "\">\r\n");
-        serializer.Write(threads.Count);
-        for (int i = 0; i < threads.Count; i++)
-        {
-            serializer.Write(threads[i]);
-        }
-
-        serializer.Log("</WriteCollection>\r\n");
-    }
-
-    void IFastSerializable.FromStream(Deserializer deserializer)
-    {
-        deserializer.Read(out log);
-        Debug.Assert(threads.Count == 0);
-        int count = deserializer.ReadInt();
-        threads = new GrowableArray<TraceThread>(count + 1);
-
-        for (int i = 0; i < count; i++)
-        {
-            TraceThread elem;
-            deserializer.Read(out elem);
-            threads.Add(elem);
-        }
-    }
     // State variables.
     private GrowableArray<TraceThread> threads;          // The threads ordered in time.
     private TraceLog log;
-    internal HistoryDictionary<int, TraceThread> threadIDtoThread;
+    internal HistoryDictionary<int, TraceThread>? threadIDtoThread;
 
     System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
     {

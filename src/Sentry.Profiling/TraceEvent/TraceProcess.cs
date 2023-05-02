@@ -8,16 +8,16 @@ namespace Sentry.Profiling.DiagnosticsTracing;
 /// </summary>
 internal sealed class TraceProcess
 {
-    // /// <summary>
-    // /// The OS process ID associated with the process. It is NOT unique across the whole log.  Use
-    // /// ProcessIndex for that.
-    // /// </summary>
-    // public int ProcessID { get { return processID; } }
-    // /// <summary>
-    // /// The index into the logical array of TraceProcesses for this process. Unlike ProcessID (which
-    // /// may be reused after the process dies, the process index is unique in the log.
-    // /// </summary>
-    // public ProcessIndex ProcessIndex { get { return processIndex; } }
+    /// <summary>
+    /// The OS process ID associated with the process. It is NOT unique across the whole log.  Use
+    /// ProcessIndex for that.
+    /// </summary>
+    public int ProcessID { get { return processID; } }
+    /// <summary>
+    /// The index into the logical array of TraceProcesses for this process. Unlike ProcessID (which
+    /// may be reused after the process dies, the process index is unique in the log.
+    /// </summary>
+    public ProcessIndex ProcessIndex { get { return processIndex; } }
     // /// <summary>
     // /// This is a short name for the process.  It is the image file name without the path or suffix.
     // /// </summary>
@@ -346,7 +346,7 @@ internal sealed class TraceProcess
     /// We also keep track of those code addresses that are NOT yet resolved to at least a File (for JIT compiled
     /// things this would be to a method
     /// </summary>
-    internal Internal.GrowableArray<CodeAddressIndex> unresolvedCodeAddresses;
+    internal GrowableArray<CodeAddressIndex> unresolvedCodeAddresses;
     internal bool unresolvedCodeAddressesIsSorted;      // True if we know that unresolvedCodeAddresses is sorted
     internal bool seenVersion2GCStartEvents;
 

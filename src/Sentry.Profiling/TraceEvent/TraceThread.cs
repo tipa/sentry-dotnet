@@ -158,7 +158,7 @@ internal sealed class TraceThread
     internal int cpuSamples;
     internal string? threadInfo;
     internal Address userStackBase;
-    private string? verboseThreadName;
+    // private string? verboseThreadName;
     /// <summary>
     /// This is a list of the activities (snippet of threads) that have run on this
     /// thread.   They are ordered by time so you can binary search for your activity based
