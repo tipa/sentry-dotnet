@@ -4,10 +4,8 @@ using Microsoft.Diagnostics.Tracing.Etlx;
 using Microsoft.Diagnostics.Tracing.EventPipe;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Parsers.Clr;
-using Sentry.Internal;
-using Sentry.Protocol;
 
-namespace Sentry.Profiling.TraceEvent;
+namespace Sentry.Profiling.DiagnosticsTracing;
 
 internal class TraceLog
 {
@@ -16,17 +14,23 @@ internal class TraceLog
     public TraceLog(EventPipeEventSource eventSource)
     {
         _eventSource = eventSource;
+        process = new TraceProcess(0, this, 0);
+        threads = new TraceThreads(this);
+        moduleFiles = new TraceModuleFiles(this);
+        callStacks = new TraceCallStacks(this);
+        codeAddresses = new TraceCodeAddresses(this);
         var sampleEventParser = new SampleProfilerTraceEventParser(_eventSource);
     }
 
     public void Process(CancellationToken cancellationToken)
     {
         var registration = cancellationToken.Register(_eventSource.StopProcessing);
+        SetupCallbacks(_eventSource);
         _eventSource.Process();
         registration.Unregister();
     }
 
-    private TraceProcess process = new();
+    private TraceProcess process;
 
     private int eventCount;                             // Total number of events
     private bool processingDisabled;                    // Have we turned off processing because of a MaxCount?
@@ -34,7 +38,9 @@ internal class TraceLog
     private bool bookKeepingEvent;                      // BookKeeping events are removed from the stream by default
     private bool bookeepingEventThatMayHaveStack;       // Some bookkeeping events (ThreadDCEnd) might have stacks
     private bool noStack;                               // This event should never have a stack associated with it, so skip them if we every try to attach a stack.
-    private TraceThread thread;                         // cache of the TraceThread for the current event.
+
+
+    internal long sessionStartTimeQPC;
 
     private TraceThreads threads;
     private TraceCallStacks callStacks;
@@ -62,7 +68,7 @@ internal class TraceLog
     public TraceCodeAddresses CodeAddresses { get { return codeAddresses; } }
 
     // TODO FIX NOW remove the jittedMethods ones.
-    private List<MethodLoadUnloadVerboseTraceData> jittedMethods;
+    private List<MethodLoadUnloadVerboseTraceData> jittedMethods = new();
 
     private TraceModuleFiles moduleFiles;
     private Internal.GrowableArray<EventsToStackIndex> eventsToStacks;
@@ -110,7 +116,7 @@ internal class TraceLog
                 {
                     if (prevIndex == eventIndex)
                     {
-                        DebugWarn(true, "Warning, two stacks given to the same event with ID " + eventIndex + " discarding the second one", null);
+                        // DebugWarn(true, "Warning, two stacks given to the same event with ID " + eventIndex + " discarding the second one", null);
                         return;
                     }
                     whereToInsertIndex++;   // insert after this index is bigger than the element compared.
@@ -141,8 +147,8 @@ internal class TraceLog
         eventsToStacks.Insert(whereToInsertIndex, new EventsToStackIndex(eventIndex, stackIndex));
     }
 
-    private static readonly Func<EventIndex, EventsToStackIndex, int> stackComparer = delegate (EventIndex eventID, EventsToStackIndex elem)
-        { return TraceEvent.Compare(eventID, elem.EventIndex); };
+    // private static readonly Func<EventIndex, EventsToStackIndex, int> stackComparer = delegate (EventIndex eventID, EventsToStackIndex elem)
+    //     { return TraceEvent.Compare(eventID, elem.EventIndex); };
 
     #endregion
 
@@ -152,6 +158,7 @@ internal class TraceLog
     /// </summary>
     private void SetupCallbacks(TraceEventDispatcher rawEvents)
     {
+        sessionStartTimeQPC = 0; // TODO not accessible at the moment rawEvents.sessionStartTimeQPC;
         processingDisabled = false;
         removeFromStream = false;
         bookKeepingEvent = false;                  // BookKeeping events are removed from the stream by default
@@ -214,7 +221,9 @@ internal class TraceLog
                 {
                     process.InsertJITTEDMethod(data.MethodStartAddress, data.MethodSize, delegate ()
                     {
+#pragma warning disable 612, 618 // disable error for use of obsolete data.TimeStampQPC
                         TraceManagedModule module = process.LoadedModules.GetOrCreateManagedModule(data.ModuleID, data.TimeStampQPC);
+#pragma warning restore 612,618
                         MethodIndex methodIndex = CodeAddresses.Methods.NewMethod(TraceLog.GetFullName(data), module.ModuleFile.ModuleFileIndex, data.MethodToken);
                         return new TraceProcess.MethodLookupInfo(data.MethodStartAddress, data.MethodSize, methodIndex);
                     });
@@ -263,55 +272,56 @@ internal class TraceLog
         rawEvents.Clr.MethodDCStopVerboseV2 += onMethodDCStop;
         ClrRundownParser.MethodDCStopVerbose += onMethodDCStop;
 
-        Action<ClrStackWalkTraceData> clrStackWalk = delegate (ClrStackWalkTraceData data)
-        {
-            bookKeepingEvent = true;
+        // TODO
+        // Action<ClrStackWalkTraceData> clrStackWalk = delegate (ClrStackWalkTraceData data)
+        // {
+        //     bookKeepingEvent = true;
 
-            // Avoid creating data structures for events we will throw away
-            if (processingDisabled)
-            {
-                return;
-            }
+        //     // Avoid creating data structures for events we will throw away
+        //     if (processingDisabled)
+        //     {
+        //         return;
+        //     }
 
-            int i = 0;
-            // Look for the previous CLR event on this same thread.
-            for (PastEventInfoIndex prevEventIndex = pastEventInfo.CurrentIndex; ;)
-            {
-                i++;
-                Debug.Assert(i < 20000);
+        //     int i = 0;
+        //     // Look for the previous CLR event on this same thread.
+        //     for (PastEventInfoIndex prevEventIndex = pastEventInfo.CurrentIndex; ;)
+        //     {
+        //         i++;
+        //         Debug.Assert(i < 20000);
 
-                prevEventIndex = pastEventInfo.GetPreviousEventIndex(prevEventIndex, data.ThreadID, true);
-                if (prevEventIndex == PastEventInfoIndex.Invalid)
-                {
-                    DebugWarn(false, "Could not find a previous event for a CLR stack trace.", data);
-                    return;
-                }
-                if (pastEventInfo.IsClrEvent(prevEventIndex))
-                {
-                    if (pastEventInfo.HasStack(prevEventIndex))
-                    {
-                        DebugWarn(false, "CLR Stack trying to be given to same event twice (can happen with lost events)", data);
-                        return;
-                    }
-                    pastEventInfo.SetHasStack(prevEventIndex);
+        //         prevEventIndex = pastEventInfo.GetPreviousEventIndex(prevEventIndex, data.ThreadID, true);
+        //         if (prevEventIndex == PastEventInfoIndex.Invalid)
+        //         {
+        //             // DebugWarn(false, "Could not find a previous event for a CLR stack trace.", data);
+        //             return;
+        //         }
+        //         if (pastEventInfo.IsClrEvent(prevEventIndex))
+        //         {
+        //             if (pastEventInfo.HasStack(prevEventIndex))
+        //             {
+        //                 // DebugWarn(false, "CLR Stack trying to be given to same event twice (can happen with lost events)", data);
+        //                 return;
+        //             }
+        //             pastEventInfo.SetHasStack(prevEventIndex);
 
-                    thread = Threads.GetOrCreateThread(data.ThreadID, data.TimeStampQPC, process);
+        //             thread = Threads.GetOrCreateThread(data.ThreadID, data.TimeStampQPC, process);
 
-                    CallStackIndex callStackIndex = callStacks.GetStackIndexForStackEvent(
-                        data.InstructionPointers, data.FrameCount, data.PointerSize, thread);
-                    Debug.Assert(callStacks.Depth(callStackIndex) == data.FrameCount);
-                    DebugWarn(pastEventInfo.GetThreadID(prevEventIndex) == data.ThreadID, "Mismatched thread for CLR Stack Trace", data);
+        //             CallStackIndex callStackIndex = callStacks.GetStackIndexForStackEvent(
+        //                 data.InstructionPointers, data.FrameCount, data.PointerSize, thread);
+        //             Debug.Assert(callStacks.Depth(callStackIndex) == data.FrameCount);
+        //             // DebugWarn(pastEventInfo.GetThreadID(prevEventIndex) == data.ThreadID, "Mismatched thread for CLR Stack Trace", data);
 
-                    // Get the previous event on the same thread.
-                    EventIndex eventIndex = pastEventInfo.GetEventIndex(prevEventIndex);
-                    Debug.Assert(eventIndex != EventIndex.Invalid); // We don't delete CLR events and that is the only way eventIndexes can be invalid
-                    AddStackToEvent(eventIndex, callStackIndex);
-                    pastEventInfo.GetEventCounts(prevEventIndex).m_stackCount++;
-                    return;
-                }
-            }
-        };
-        rawEvents.Clr.ClrStackWalk += clrStackWalk;
+        //             // Get the previous event on the same thread.
+        //             EventIndex eventIndex = pastEventInfo.GetEventIndex(prevEventIndex);
+        //             Debug.Assert(eventIndex != EventIndex.Invalid); // We don't delete CLR events and that is the only way eventIndexes can be invalid
+        //             AddStackToEvent(eventIndex, callStackIndex);
+        //             pastEventInfo.GetEventCounts(prevEventIndex).m_stackCount++;
+        //             return;
+        //         }
+        //     }
+        // };
+        // rawEvents.Clr.ClrStackWalk += clrStackWalk;
 
         // TODO SampleProfilerTraceEventParser.ThreadStackWalk is marked obsolete and that it can be removed.
         // // Process stack trace from EventPipe trace
@@ -349,8 +359,8 @@ internal class TraceLog
         // var eventPipeParser = new SampleProfilerTraceEventParser(rawEvents);
         // eventPipeParser.ThreadStackWalk += clrThreadStackWalk;
 
-        var clrPrivate = new ClrPrivateTraceEventParser(rawEvents);
-        clrPrivate.ClrStackWalk += clrStackWalk;
+        // var clrPrivate = new ClrPrivateTraceEventParser(rawEvents);
+        // clrPrivate.ClrStackWalk += clrStackWalk;
 
         // // The following 3 callbacks for a small state machine to determine whether the process
         // // is running server GC and what the server GC threads are.
@@ -432,6 +442,24 @@ internal class TraceLog
         // { CategorizeThread(data, ".NET ThreadPool Worker"); };
         // fxParser.ThreadTransferReceive += delegate (ThreadTransferReceiveArgs data)
         // { CategorizeThread(data, ".NET ThreadPool Worker"); };
+    }
+
+    internal static string GetFullName(MethodLoadUnloadVerboseTraceData data)
+    {
+        string sig = data.MethodSignature;
+        int parens = sig.IndexOf('(');
+        string args;
+        if (parens >= 0)
+        {
+            args = sig.Substring(parens);
+        }
+        else
+        {
+            args = "";
+        }
+
+        string fullName = data.MethodNamespace + "." + data.MethodName + args;
+        return fullName;
     }
 
     // private void AddSample(TraceThread thread, TraceActivity activity, StackSourceCallStackIndex callstackIndex, double timestampMs)

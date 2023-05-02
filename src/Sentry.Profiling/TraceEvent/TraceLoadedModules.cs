@@ -3,7 +3,7 @@ using Microsoft.Diagnostics.Tracing.Etlx;
 using Microsoft.Diagnostics.Tracing.Parsers.Clr;
 using Address = System.UInt64;
 
-namespace Sentry.Profiling.TraceEvent;
+namespace Sentry.Profiling.DiagnosticsTracing;
 
 /// <summary>
 /// TraceLoadedModules represents the collection of modules (loaded DLLs or EXEs) in a
@@ -75,13 +75,11 @@ internal sealed class TraceLoadedModules : IEnumerable<TraceLoadedModule>
         return null;
     }
 
-    [Obsolete("Not obsolete, just needs to access data.TimeStampQPC", false)]
     internal void ManagedModuleLoadOrUnload(ModuleLoadUnloadTraceData data, bool isLoad, bool isDCStartStop)
     {
         var ilModulePath = data.ModuleILPath;
         var nativeModulePath = data.ModuleNativePath;
         var nativePdbSignature = data.NativePdbSignature;
-
         // If the NGEN image is used as the IL image (happened in CoreCLR case), change the name of the
         // IL image to be a 'fake' non-nGEN image.  We need this because we need a DISTINCT file that
         // we can hang the PDB signature information on for the IL pdb.
@@ -111,7 +109,9 @@ internal sealed class TraceLoadedModules : IEnumerable<TraceLoadedModule>
         }
 
         int index;
+#pragma warning disable 612, 618 // disable error for use of obsolete data.TimeStampQPC
         TraceManagedModule? module = FindManagedModuleAndIndex(data.ModuleID, data.TimeStampQPC, out index);
+#pragma warning restore 612,618
         if (module == null)
         {
             // We need to make a new module
@@ -125,9 +125,10 @@ internal sealed class TraceLoadedModules : IEnumerable<TraceLoadedModule>
         module.flags = data.ModuleFlags;
         if (nativeModulePath.Length > 0)
         {
+#pragma warning disable 612, 618 // disable error for use of obsolete data.TimeStampQPC
             module.nativeModule = GetLoadedModule(nativeModulePath, data.TimeStampQPC);
+#pragma warning restore 612,618
         }
-
         if (module.ModuleFile.fileName == null)
         {
             process.Log.ModuleFiles.SetModuleFileName(module.ModuleFile, ilModulePath);
@@ -160,7 +161,9 @@ internal sealed class TraceLoadedModules : IEnumerable<TraceLoadedModule>
             // process.Log.DebugWarn(module.loadTimeQPC == 0 || data.Opcode == TraceEventOpcode.DataCollectionStart, "Events for module happened before load.  PrevEventTime: " + module.LoadTimeRelativeMSec.ToString("f4"), data);
             // process.Log.DebugWarn(data.TimeStampQPC < module.unloadTimeQPC, "Managed Unload time < load time!", data);
 
+#pragma warning disable 612,618 // disable error for use of obsolete data.TimeStampQPC
             module.loadTimeQPC = data.TimeStampQPC;
+#pragma warning restore 612,618
             if (!isDCStartStop)
             {
                 module.loadTimeQPC = process.Log.sessionStartTimeQPC;
@@ -172,7 +175,9 @@ internal sealed class TraceLoadedModules : IEnumerable<TraceLoadedModule>
             // process.Log.DebugWarn(module.unloadTimeQPC == long.MaxValue, "Unloading a managed image twice PrevUnloadTime: " + module.UnloadTimeRelativeMSec.ToString("f4"), data);
             if (!isDCStartStop)
             {
+#pragma warning disable 612,618 // disable error for use of obsolete data.TimeStampQPC
                 module.unloadTimeQPC = data.TimeStampQPC;
+#pragma warning restore 612,618
             }
         }
         CheckClassInvarients();

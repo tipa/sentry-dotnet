@@ -3,7 +3,7 @@ using Microsoft.Diagnostics.Tracing.EventPipe;
 using Sentry.Internal;
 using Sentry.Protocol;
 
-namespace Sentry.Profiling.TraceEvent;
+namespace Sentry.Profiling.DiagnosticsTracing;
 
 // A list of frame indexes.
 using SentryProfileStackTrace = HashableGrowableArray<int>;

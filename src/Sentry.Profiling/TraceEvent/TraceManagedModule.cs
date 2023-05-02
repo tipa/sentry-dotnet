@@ -1,7 +1,7 @@
 using Microsoft.Diagnostics.Tracing.Parsers.Clr;
 using Address = System.UInt64;
 
-namespace Sentry.Profiling.TraceEvent;
+namespace Sentry.Profiling.DiagnosticsTracing;
 
 /// <summary>
 /// A TraceManagedModule represents the loading of a .NET module into .NET AppDomain.

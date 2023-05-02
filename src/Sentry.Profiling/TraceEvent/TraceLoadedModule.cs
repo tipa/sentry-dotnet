@@ -1,6 +1,6 @@
 using Address = System.UInt64;
 
-namespace Sentry.Profiling.TraceEvent;
+namespace Sentry.Profiling.DiagnosticsTracing;
 
 /// <summary>
 /// A TraceLoadedModule represents a module (DLL or EXE) that was loaded into a process.  It represents

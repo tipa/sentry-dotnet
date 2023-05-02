@@ -1,7 +1,7 @@
 using Microsoft.Diagnostics.Tracing.Etlx;
 using Address = System.UInt64;
 
-namespace Sentry.Profiling.TraceEvent;
+namespace Sentry.Profiling.DiagnosticsTracing;
 
 /// <summary>
 /// A TraceProcess represents a process in the trace.

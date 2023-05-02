@@ -168,7 +168,7 @@ internal sealed class TraceModuleFile
     public TraceModuleFile? ManagedModule { get { return managedModule; } }
 
     #region Private
-    internal TraceModuleFile(string fileName, Address imageBase, ModuleFileIndex moduleFileIndex)
+    internal TraceModuleFile(string? fileName, Address imageBase, ModuleFileIndex moduleFileIndex)
     {
         if (fileName != null)
         {
