@@ -4,7 +4,7 @@ using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Maui.TestUtils.DeviceTests.Runners.HeadlessRunner;
 
-#if __IOS__ || MACCATALYST
+#if IOS || MACCATALYST
 using PlatformView = UIKit.UIWindow;
 #elif MONOANDROID
 using PlatformView = Android.App.Activity;
@@ -26,9 +26,9 @@ public static class TestWindow
         {
             if (s_platformWindow is null)
             {
-#if __ANDROID__
+#if ANDROID
                 s_platformWindow = MauiTestInstrumentation.Current?.CurrentExecutionContext as PlatformView;
-#elif __IOS__
+#elif IOS
                 s_platformWindow = MauiTestApplicationDelegate.Current?.Window;
 #endif
             }

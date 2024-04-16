@@ -10,7 +10,7 @@ public static class MauiProgram
         var appBuilder = MauiApp.CreateBuilder()
             .ConfigureLifecycleEvents(life =>
             {
-#if __ANDROID__
+#if ANDROID
                 life.AddAndroid(android =>
                 {
                     android.OnCreate((activity, bundle) =>

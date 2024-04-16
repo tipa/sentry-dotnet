@@ -620,10 +620,10 @@ internal class Hub : IHub, IMetricHub, IDisposable
         }
         //Dont dispose of ScopeManager since we want dangling transactions to still be able to access tags.
 
-#if __IOS__
-            // TODO
+#if IOS
+        // TODO
 #elif ANDROID
-            // TODO
+        // TODO
 #elif NET8_0_OR_GREATER
         if (AotHelper.IsNativeAot)
         {

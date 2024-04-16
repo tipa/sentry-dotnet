@@ -36,7 +36,7 @@ public abstract class BindableTests<TOptions>(params string[] skipProperties)
 #if ANDROID
                 && !(p.PropertyType == typeof(SentryOptions.AndroidOptions))
                 && !(p.PropertyType == typeof(SentryOptions.NativeOptions))
-#elif __IOS__
+#elif IOS
                 && !(p.PropertyType == typeof(SentryOptions.NativeOptions))
 #endif
                 );

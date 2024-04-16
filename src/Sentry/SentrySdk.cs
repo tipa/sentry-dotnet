@@ -52,7 +52,7 @@ public static partial class SentrySdk
         // Initialize native platform SDKs here
         if (options.InitNativeSdks)
         {
-#if __IOS__
+#if IOS
             InitSentryCocoaSdk(options);
 #elif ANDROID
             InitSentryAndroidSdk(options);
@@ -75,7 +75,7 @@ public static partial class SentrySdk
         options.PostInitCallbacks.Clear();
 
         // Platform specific check for profiler misconfiguration.
-#if __IOS__
+#if IOS
         // No user-facing warning necessary - the integration is part of InitSentryCocoaSdk().
         Debug.Assert(options.IsProfilingEnabled == (options.TransactionProfilerFactory is not null));
 #elif ANDROID
@@ -701,7 +701,7 @@ public static partial class SentrySdk
             case CrashType.Native:
                 NativeCrash();
                 break;
-#elif __IOS__
+#elif IOS
             case CrashType.Native:
                 SentryCocoaSdk.Crash();
                 break;

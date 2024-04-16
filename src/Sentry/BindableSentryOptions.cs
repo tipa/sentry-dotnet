@@ -100,7 +100,7 @@ internal partial class BindableSentryOptions
 #if ANDROID
         Android.ApplyTo(options.Android);
         Native.ApplyTo(options.Native);
-#elif __IOS__
+#elif IOS
         Native.ApplyTo(options.Native);
 #endif
     }

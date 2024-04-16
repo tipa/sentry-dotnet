@@ -76,7 +76,7 @@ public static class SentryMauiAppBuilderExtensions
 
         builder.ConfigureLifecycleEvents(events =>
         {
-#if __IOS__
+#if IOS
             events.AddiOS(lifecycle =>
             {
                 lifecycle.FinishedLaunching((application, launchOptions) =>

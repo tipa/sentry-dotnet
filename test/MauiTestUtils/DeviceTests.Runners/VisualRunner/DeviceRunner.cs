@@ -173,7 +173,7 @@ public class DeviceRunner : ITestListener, ITestRunner
 
     private static Stream GetConfigurationStreamForAssembly(string assemblyName)
     {
-#if __ANDROID__
+#if ANDROID
         var assets = Android.App.Application.Context.Assets;
         var allAssets = assets.List(string.Empty);
 

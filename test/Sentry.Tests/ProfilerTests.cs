@@ -9,7 +9,7 @@ public class ProfilerTests
         _testOutputLogger = new TestOutputDiagnosticLogger(output);
     }
 
-#if __IOS__
+#if IOS
     [Fact]
 #else
     [Fact(Skip = "Profiling is not supported on this platform")]

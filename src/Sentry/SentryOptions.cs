@@ -1233,7 +1233,7 @@ public class SentryOptions
         var reader = new Lazy<IAndroidAssemblyReader?>(() => AndroidHelpers.GetAndroidAssemblyReader(DiagnosticLogger));
         AssemblyReader = name => reader.Value?.TryReadAssembly(name);
 
-#elif __IOS__
+#elif IOS
         Native = new NativeOptions(this);
 #endif
 

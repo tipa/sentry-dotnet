@@ -14,9 +14,9 @@ public static class TestServices
         {
             if (s_services is null)
             {
-#if __ANDROID__
+#if ANDROID
                 s_services = MauiTestInstrumentation.Current?.Services ?? MauiApplication.Current.Services;
-#elif __IOS__
+#elif IOS
                 s_services = MauiTestApplicationDelegate.Current?.Services ?? MauiUIApplicationDelegate.Current.Services;
 #elif WINDOWS
                     s_services = MauiWinUIApplication.Current.Services;

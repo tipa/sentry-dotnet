@@ -23,7 +23,7 @@ internal class SentryMauiOptionsSetup : IConfigureOptions<SentryMauiOptions>
         _config.Bind(bindable);
         bindable.ApplyTo(options);
 
-#if __ANDROID__ || __IOS__
+#if ANDROID || IOS
         options.Native.AttachScreenshot = options.AttachScreenshot;
 #endif
 

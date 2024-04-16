@@ -36,7 +36,7 @@ internal class ScreenshotAttachmentContent : IAttachmentContent
     {
         var stream = Stream.Null;
         // Not including this on Windows specific build because on WinUI this can deadlock.
-#if __ANDROID__ || __IOS__
+#if ANDROID || IOS
         Stream CaptureScreenBlocking()
         {
             // This actually runs synchronously (returning Task.FromResult) on the following platforms:
@@ -58,7 +58,7 @@ internal class ScreenshotAttachmentContent : IAttachmentContent
         }
         else
         {
-#if __ANDROID__ //Android does not require UI thread to capture screen but iOS does.
+#if ANDROID // Android does not require UI thread to capture screen but iOS does.
             stream = CaptureScreenBlocking();
 #else
             stream = MainThread.InvokeOnMainThreadAsync(async () =>
